@@ -7,20 +7,32 @@ export type Database = {
           nome: string
           email: string
           ativo: boolean
-          created_at?: string | null
+          criado_em: string
         }
         Insert: {
           id?: string
           nome: string
           email: string
           ativo?: boolean
-          created_at?: string | null
+          criado_em?: string
         }
         Update: {
           nome?: string
           email?: string
           ativo?: boolean
-          created_at?: string | null
+          criado_em?: string
+        }
+      }
+
+      admins: {
+        Row: {
+          member_id: string
+        }
+        Insert: {
+          member_id: string
+        }
+        Update: {
+          member_id?: string
         }
       }
 
@@ -30,8 +42,7 @@ export type Database = {
           member_id: string
           competencia: string
           motivo: "LESAO" | "TRABALHO"
-          aprovado_por?: string | null
-          created_at?: string | null
+          aprovado_por: string | null
         }
         Insert: {
           id?: string
@@ -39,20 +50,23 @@ export type Database = {
           competencia: string
           motivo: "LESAO" | "TRABALHO"
           aprovado_por?: string | null
-          created_at?: string | null
         }
         Update: {
           member_id?: string
           competencia?: string
           motivo?: "LESAO" | "TRABALHO"
           aprovado_por?: string | null
-          created_at?: string | null
         }
       }
     }
 
     Views: {}
-    Functions: {}
+    Functions: {
+      gerar_mensalidades_mes: {
+        Args: { mes_competencia: string }
+        Returns: number
+      }
+    }
     Enums: {}
     CompositeTypes: {}
   }

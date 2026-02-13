@@ -1,6 +1,6 @@
 import { useEffect, useState, FormEvent } from 'react'
 import { supabase } from '../../lib/supabase'
-import { Users, UserPlus, UserMinus, Shield } from 'lucide-react'
+import { UserPlus, UserMinus, Shield } from 'lucide-react'
 
 interface Member {
   id: string
@@ -10,6 +10,8 @@ interface Member {
   criado_em: string
   is_admin: boolean
 }
+
+type AdminRow = { member_id: string }
 
 export default function AdminMembers() {
   const [members, setMembers] = useState<Member[]>([])
@@ -28,30 +30,36 @@ export default function AdminMembers() {
 
   useEffect(() => {
     loadMembers()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const loadMembers = async () => {
-    const { data: membersData } = await supabase
-      .from('members')
-      .select(`
-        id,
-        nome,
-        email,
-        ativo,
-        criado_em
-      `)
-      .order('nome')
+    setLoading(true)
 
-    const { data: adminsData } = await supabase
+    const { data: membersData, error: membersErr } = await supabase
+      .from('members')
+      .select('id,nome,email,ativo,criado_em')
+      .order('nome')
+      .returns<Omit<Member, 'is_admin'>[]>()
+
+    const { data: adminsData, error: adminsErr } = await supabase
       .from('admins')
       .select('member_id')
+      .returns<AdminRow[]>()
 
-    if (membersData && adminsData) {
-      const adminIds = adminsData.map(a => a.member_id)
-      setMembers(membersData.map(m => ({
-        ...m,
-        is_admin: adminIds.includes(m.id)
-      })))
+    if (!membersErr && !adminsErr && membersData && adminsData) {
+      const adminIds = adminsData.map((a) => a.member_id)
+
+      setMembers(
+        membersData.map((m) => ({
+          ...m,
+          is_admin: adminIds.includes(m.id),
+        }))
+      )
+    } else {
+      // Se quiser, dá pra logar os erros:
+      // console.error({ membersErr, adminsErr })
+      setMembers([])
     }
 
     setLoading(false)
@@ -60,27 +68,31 @@ export default function AdminMembers() {
   const handleAddMember = async (e: FormEvent) => {
     e.preventDefault()
 
-    const { error } = await supabase
-      .from('members')
-      .insert({
+    const emailLower = email.toLowerCase()
+
+    const { error } = await supabase.from('members').insert([
+      {
         nome,
-        email: email.toLowerCase(),
-        ativo: true
-      })
+        email: emailLower,
+        ativo: true,
+      },
+    ])
 
     if (!error) {
       setShowAddMember(false)
       setNome('')
       setEmail('')
-      loadMembers()
-      
+      await loadMembers()
+
       // Enviar convite por e-mail
       await supabase.auth.signInWithOtp({
-        email: email.toLowerCase(),
+        email: emailLower,
         options: {
-          emailRedirectTo: window.location.origin
-        }
+          emailRedirectTo: window.location.origin,
+        },
       })
+    } else {
+      alert('Erro ao adicionar membro')
     }
   }
 
@@ -91,7 +103,9 @@ export default function AdminMembers() {
       .eq('id', memberId)
 
     if (!error) {
-      loadMembers()
+      await loadMembers()
+    } else {
+      alert('Erro ao atualizar status')
     }
   }
 
@@ -99,8 +113,9 @@ export default function AdminMembers() {
     const competencia = prompt('Digite a competência (YYYY-MM):')
     if (!competencia) return
 
-    const { data, error } = await supabase
-      .rpc('gerar_mensalidades_mes', { mes_competencia: competencia })
+    const { data, error } = await supabase.rpc('gerar_mensalidades_mes', {
+      mes_competencia: competencia,
+    })
 
     if (!error) {
       alert(`${data} mensalidades geradas para ${competencia}`)
@@ -113,22 +128,26 @@ export default function AdminMembers() {
     e.preventDefault()
     if (!selectedMember) return
 
-    const { data: { user } } = await supabase.auth.getUser()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
     if (!user) return
 
-    const { error } = await supabase
-      .from('exemptions')
-      .insert({
+    const { error } = await supabase.from('exemptions').insert([
+      {
         member_id: selectedMember,
         competencia: competenciaIsencao,
         motivo: motivoIsencao,
-        aprovado_por: user.id
-      })
+        aprovado_por: user.id,
+      },
+    ])
 
     if (!error) {
       setShowIsencao(false)
       setSelectedMember(null)
       alert('Isenção adicionada!')
+    } else {
+      alert('Erro ao adicionar isenção')
     }
   }
 
@@ -147,13 +166,12 @@ export default function AdminMembers() {
           <h1 className="text-2xl font-bold">Gestão de Membros</h1>
           <p className="text-gray-600">{members.length} membros cadastrados</p>
         </div>
+
         <div className="flex gap-2">
-          <button
-            onClick={handleGerarMensalidades}
-            className="btn border border-gray-300"
-          >
+          <button onClick={handleGerarMensalidades} className="btn border border-gray-300">
             Gerar Mensalidades
           </button>
+
           <button
             onClick={() => setShowAddMember(true)}
             className="btn btn-primary flex items-center gap-2"
@@ -172,20 +190,22 @@ export default function AdminMembers() {
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-1">
                   <h3 className="font-bold">{member.nome}</h3>
-                  {member.is_admin && (
-                    <span title="Admin">
-  <Shield className="w-4 h-4 text-primary" />
-</span>
 
+                  {member.is_admin && (
+                    <span title="Admin" className="inline-flex">
+                      <Shield className="w-4 h-4 text-primary" aria-label="Admin" />
+                    </span>
                   )}
                 </div>
+
                 <p className="text-sm text-gray-600">{member.email}</p>
               </div>
-              <span className={`text-xs px-2 py-1 rounded ${
-                member.ativo
-                  ? 'bg-green-100 text-green-800'
-                  : 'bg-gray-100 text-gray-600'
-              }`}>
+
+              <span
+                className={`text-xs px-2 py-1 rounded ${
+                  member.ativo ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
+                }`}
+              >
                 {member.ativo ? 'Ativo' : 'Inativo'}
               </span>
             </div>
@@ -193,11 +213,7 @@ export default function AdminMembers() {
             <div className="flex gap-2">
               <button
                 onClick={() => handleToggleAtivo(member.id, member.ativo)}
-                className={`btn flex-1 text-sm ${
-                  member.ativo
-                    ? 'border border-gray-300'
-                    : 'btn-success'
-                }`}
+                className={`btn flex-1 text-sm ${member.ativo ? 'border border-gray-300' : 'btn-success'}`}
               >
                 {member.ativo ? (
                   <>
@@ -211,6 +227,7 @@ export default function AdminMembers() {
                   </>
                 )}
               </button>
+
               <button
                 onClick={() => {
                   setSelectedMember(member.id)
@@ -254,9 +271,7 @@ export default function AdminMembers() {
                   className="input"
                   required
                 />
-                <p className="text-xs text-gray-600 mt-1">
-                  Um convite será enviado para este e-mail
-                </p>
+                <p className="text-xs text-gray-600 mt-1">Um convite será enviado para este e-mail</p>
               </div>
 
               <div className="flex gap-2 pt-4">
@@ -267,10 +282,7 @@ export default function AdminMembers() {
                 >
                   Cancelar
                 </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary flex-1"
-                >
+                <button type="submit" className="btn btn-primary flex-1">
                   Adicionar
                 </button>
               </div>
@@ -327,10 +339,7 @@ export default function AdminMembers() {
                 >
                   Cancelar
                 </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary flex-1"
-                >
+                <button type="submit" className="btn btn-primary flex-1">
                   Confirmar Isenção
                 </button>
               </div>
