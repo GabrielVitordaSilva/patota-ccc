@@ -173,7 +173,10 @@ export default function AdminMembers() {
                 <div className="flex items-center gap-2 mb-1">
                   <h3 className="font-bold">{member.nome}</h3>
                   {member.is_admin && (
-                    <Shield className="w-4 h-4 text-primary" title="Admin" />
+                    <span title="Admin">
+  <Shield className="w-4 h-4 text-primary" />
+</span>
+
                   )}
                 </div>
                 <p className="text-sm text-gray-600">{member.email}</p>
